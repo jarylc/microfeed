@@ -26,23 +26,34 @@ class SetupR2 {
     };
 
     this.s3.createBucket(bucketParams, function (err, data) {
+      console.log(`Creating bucket ${bucket}...`);
+      let objectReadWritePermissionsOnly = false;
       if (err) {
         if (err.code === 'BucketAlreadyOwnedByYou') {
           console.log(`Bucket exists: ${bucket}`);
         } else {
-          console.log("Error", err);
-          process.exit(1);
+          // eslint-disable-next-line no-unused-vars
+          this.s3.listObjects(bucketParams, (err, data) => {
+            if (!err) {
+              objectReadWritePermissionsOnly = true;
+              console.log(`Bucket ${bucket} exists, but and Object Read & Write only permissions detected`);
+            }
+          })
+          if (!objectReadWritePermissionsOnly) {
+            console.log("Error", err);
+            process.exit(1);
+          }
         }
       } else {
         console.log(`Success: ${bucket} created`, data.Location);
       }
-      onDone();
+      onDone(objectReadWritePermissionsOnly);
     });
   }
 
-  _setupCorsRules() {
+  _setupCorsRules(bucket) {
     const params = {
-      Bucket: this.v.get('R2_PUBLIC_BUCKET'),
+      Bucket: bucket,
       CORSConfiguration: {
         CORSRules: [{
           AllowedMethods: ['DELETE', 'POST', 'PUT'],
@@ -52,7 +63,7 @@ class SetupR2 {
       }
     };
 
-    console.log(`Setting up CORS rules for ${this.v.get('R2_PUBLIC_BUCKET')}...`)
+    console.log(`Setting up CORS rules for ${bucket}...`)
     this.s3.putBucketCors(params, (err, data) => {
       if (err) {
         console.log(err);
@@ -66,8 +77,10 @@ class SetupR2 {
 
   setupPublicBucket() {
     const bucket = this.v.get('R2_PUBLIC_BUCKET');
-    this._setupBucket(bucket, () => {
-      this._setupCorsRules();
+    this._setupBucket(bucket, (objectReadWritePermissionsOnly) => {
+      if (!objectReadWritePermissionsOnly) {
+        this._setupCorsRules(bucket);
+      }
     });
   }
 }
